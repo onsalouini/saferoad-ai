@@ -1,1 +1,22 @@
-"# Data`ndata/raw/*`ndata/processed/*`n*.csv`n*.zip`n`n# Python`nvenv/`n__pycache__/`n*.pyc`n.env`n`n# Models`n*.pkl`n*.joblib`n`n# Node`nnode_modules/`n.env.local`n`n# OS`n.DS_Store"  "# Data`ndata/raw/*`ndata/processed/*`n*.csv`n*.zip`n`n# Python`nvenv/`n__pycache__/`n*.pyc`n.env`n`n# Models`n*.pkl`n*.joblib`n`n# Node`nnode_modules/`n.env.local`n`n# OS`n.DS_Store" 
+# Data
+data/raw/*
+data/processed/*
+*.csv
+*.zip
+
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Models
+*.pkl
+*.joblib
+
+# Node
+node_modules/
+.env.local
+
+# OS
+.DS_Store
