@@ -1,3 +1,54 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  /* Surfaces & encre (valeurs RGB pour l'opacité Tailwind) */
+  --page: 13 17 23;
+  --surface: 22 27 34;
+  --raised: 30 36 45;
+  --line: 48 54 61;
+  --ink: 240 239 236;
+  --soft: 195 194 183;
+  --muted: 137 135 129;
+  --accent: 57 135 229;
+  --accent-strong: 42 120 214;
+  /* Statuts de risque (réservés aux niveaux, toujours accompagnés d'un libellé) */
+  --good: 12 163 12;
+  --warning: 250 178 25;
+  --serious: 236 131 90;
+  --critical: 208 59 59;
+  /* Graphique divergent : hausse / baisse du risque */
+  --up: 230 103 103;
+  --down: 57 135 229;
+}
+
+html, body, #root { min-height: 100%; }
+body {
+  @apply bg-page text-ink font-sans antialiased;
+}
+
+@layer components {
+  .card { @apply bg-surface border border-line/70 rounded-2xl min-w-0; }
+  .card-pad { @apply p-5 sm:p-6; }
+  .eyebrow { @apply text-xs font-semibold uppercase tracking-wider text-muted; }
+  .h-section { @apply text-lg font-semibold text-ink; }
+  .field { @apply w-full bg-raised border border-line rounded-lg px-3 py-2 text-sm text-ink placeholder:text-muted
+    focus:outline-none focus:ring-2 focus:ring-accent/60 focus:border-accent; }
+  .label { @apply block text-xs font-medium text-soft mb-1; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition
+    disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent; }
+  .btn-primary { @apply btn bg-accent-strong text-white hover:bg-accent; }
+  .btn-ghost { @apply btn bg-raised text-ink hover:bg-line; }
+  .tnum { font-variant-numeric: tabular-nums; }
+}
+
+/* Leaflet : intégration au thème sombre */
+.leaflet-container { background: rgb(var(--page)); font-family: inherit; border-radius: 1rem; }
+.map-dark { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.35); }
+.leaflet-control-attribution { background: rgb(var(--surface) / .85) !important; color: rgb(var(--muted)) !important; }
+.leaflet-control-attribution a { color: rgb(var(--soft)) !important; }
+.leaflet-bar a { background: rgb(var(--raised)) !important; color: rgb(var(--ink)) !important; border-color: rgb(var(--line)) !important; }
+.leaflet-tooltip { background: rgb(var(--raised)); color: rgb(var(--ink)); border: 1px solid rgb(var(--line)); border-radius: .5rem; box-shadow: none; }
+.leaflet-tooltip-top:before { border-top-color: rgb(var(--line)); }

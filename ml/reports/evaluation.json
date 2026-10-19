@@ -1,0 +1,369 @@
+{
+  "generated_at": "2026-10-19T12:48:37+00:00",
+  "dataset": {
+    "source": "US Accidents (Moosavi et al., mars 2023) — miroir Hugging Face yuvidhepe/us-accidents-updated, fragment 1/7",
+    "rows_evaluated": 299581,
+    "years": [
+      2016,
+      2017,
+      2021,
+      2022
+    ],
+    "positive_rate": 0.3554,
+    "distance_median_mi": 0.0
+  },
+  "target": {
+    "identified": "Severity >= 3",
+    "night_encoding": "Night=1",
+    "hypotheses": [
+      {
+        "target": "Severity >= 3",
+        "night_encoding": "Night=1",
+        "roc_auc": 0.8799
+      },
+      {
+        "target": "Severity == 4",
+        "night_encoding": "Night=1",
+        "roc_auc": 0.5885
+      },
+      {
+        "target": "Severity >= 2",
+        "night_encoding": "Night=1",
+        "roc_auc": 0.7251
+      },
+      {
+        "target": "Severity >= 3",
+        "night_encoding": "Night=0",
+        "roc_auc": 0.8796
+      },
+      {
+        "target": "Severity == 4",
+        "night_encoding": "Night=0",
+        "roc_auc": 0.5884
+      },
+      {
+        "target": "Severity >= 2",
+        "night_encoding": "Night=0",
+        "roc_auc": 0.7275
+      }
+    ],
+    "meaning": "Probabilité qu'un accident survenant dans ces conditions soit grave (Severity 3-4). Le dataset ne contient que des accidents : le modèle ne prédit pas la probabilité qu'un accident se produise."
+  },
+  "metrics": {
+    "declared_roc_auc": 0.8955,
+    "roc_auc": 0.8799,
+    "pr_auc": 0.7968,
+    "brier": 0.1605,
+    "roc_auc_distance_fixed": 0.8913,
+    "pr_auc_distance_fixed": 0.8044,
+    "brier_distance_fixed": 0.1572
+  },
+  "thresholds": [
+    {
+      "mode": "0.50",
+      "threshold": 0.5,
+      "flagged_rate": 0.533,
+      "precision": 0.6134,
+      "recall": 0.9199,
+      "f1": 0.736,
+      "tp": 97944,
+      "fp": 61736,
+      "fn": 8524,
+      "tn": 131377
+    },
+    {
+      "mode": "standard",
+      "threshold": 0.65,
+      "flagged_rate": 0.4039,
+      "precision": 0.7041,
+      "recall": 0.8002,
+      "f1": 0.7491,
+      "tp": 85197,
+      "fp": 35803,
+      "fn": 21271,
+      "tn": 157310
+    },
+    {
+      "mode": "pro",
+      "threshold": 0.75,
+      "flagged_rate": 0.302,
+      "precision": 0.7745,
+      "recall": 0.6581,
+      "f1": 0.7116,
+      "tp": 70063,
+      "fp": 20396,
+      "fn": 36405,
+      "tn": 172717
+    },
+    {
+      "mode": "strict",
+      "threshold": 0.85,
+      "flagged_rate": 0.1734,
+      "precision": 0.8564,
+      "recall": 0.4179,
+      "f1": 0.5617,
+      "tp": 44488,
+      "fp": 7461,
+      "fn": 61980,
+      "tn": 185652
+    }
+  ],
+  "calibration": [
+    {
+      "bin": "0.0-0.1",
+      "predicted": 0.0522,
+      "observed": 0.0099,
+      "count": 44156
+    },
+    {
+      "bin": "0.1-0.2",
+      "predicted": 0.1466,
+      "observed": 0.0236,
+      "count": 30178
+    },
+    {
+      "bin": "0.2-0.3",
+      "predicted": 0.2486,
+      "observed": 0.054,
+      "count": 22231
+    },
+    {
+      "bin": "0.3-0.4",
+      "predicted": 0.3501,
+      "observed": 0.1021,
+      "count": 21469
+    },
+    {
+      "bin": "0.4-0.5",
+      "predicted": 0.4502,
+      "observed": 0.182,
+      "count": 21867
+    },
+    {
+      "bin": "0.5-0.6",
+      "predicted": 0.5517,
+      "observed": 0.2974,
+      "count": 25037
+    },
+    {
+      "bin": "0.6-0.7",
+      "predicted": 0.6509,
+      "observed": 0.4254,
+      "count": 28048
+    },
+    {
+      "bin": "0.7-0.8",
+      "predicted": 0.7519,
+      "observed": 0.5712,
+      "count": 34271
+    },
+    {
+      "bin": "0.8-0.9",
+      "predicted": 0.8521,
+      "observed": 0.761,
+      "count": 43750
+    },
+    {
+      "bin": "0.9-1.0",
+      "predicted": 0.9344,
+      "observed": 0.8993,
+      "count": 28574
+    }
+  ],
+  "permutation_importance": [
+    {
+      "group": "Localisation (lat/lng)",
+      "auc_drop": 0.1927
+    },
+    {
+      "group": "Infrastructure routière",
+      "auc_drop": 0.0995
+    },
+    {
+      "group": "État",
+      "auc_drop": 0.061
+    },
+    {
+      "group": "Temps (heure, jour, mois, saison)",
+      "auc_drop": 0.0269
+    },
+    {
+      "group": "Météo (conditions + mesures)",
+      "auc_drop": 0.0178
+    },
+    {
+      "group": "Distance d'impact",
+      "auc_drop": 0.0125
+    }
+  ],
+  "by_year": [
+    {
+      "year": 2016,
+      "n": 76225,
+      "positive_rate": 0.3708,
+      "roc_auc": 0.8937,
+      "roc_auc_distance_fixed": 0.8997
+    },
+    {
+      "year": 2017,
+      "n": 62915,
+      "positive_rate": 0.3835,
+      "roc_auc": 0.8908,
+      "roc_auc_distance_fixed": 0.8939
+    },
+    {
+      "year": 2021,
+      "n": 96748,
+      "positive_rate": 0.3375,
+      "roc_auc": 0.869,
+      "roc_auc_distance_fixed": 0.8882
+    },
+    {
+      "year": 2022,
+      "n": 63693,
+      "positive_rate": 0.3364,
+      "roc_auc": 0.8675,
+      "roc_auc_distance_fixed": 0.8804
+    }
+  ],
+  "by_state": [
+    {
+      "state": "CA",
+      "n": 73625,
+      "positive_rate": 0.4079,
+      "roc_auc": 0.8894
+    },
+    {
+      "state": "TX",
+      "n": 35590,
+      "positive_rate": 0.3029,
+      "roc_auc": 0.8647
+    },
+    {
+      "state": "FL",
+      "n": 28934,
+      "positive_rate": 0.2956,
+      "roc_auc": 0.9112
+    },
+    {
+      "state": "PA",
+      "n": 14400,
+      "positive_rate": 0.2122,
+      "roc_auc": 0.8949
+    },
+    {
+      "state": "SC",
+      "n": 13173,
+      "positive_rate": 0.1278,
+      "roc_auc": 0.9106
+    },
+    {
+      "state": "NY",
+      "n": 12728,
+      "positive_rate": 0.4463,
+      "roc_auc": 0.8659
+    },
+    {
+      "state": "IL",
+      "n": 11519,
+      "positive_rate": 0.4154,
+      "roc_auc": 0.9357
+    },
+    {
+      "state": "MI",
+      "n": 10725,
+      "positive_rate": 0.3734,
+      "roc_auc": 0.9064
+    },
+    {
+      "state": "GA",
+      "n": 9628,
+      "positive_rate": 0.6212,
+      "roc_auc": 0.8967
+    },
+    {
+      "state": "NC",
+      "n": 9104,
+      "positive_rate": 0.1637,
+      "roc_auc": 0.8965
+    },
+    {
+      "state": "OH",
+      "n": 8337,
+      "positive_rate": 0.4181,
+      "roc_auc": 0.8402
+    },
+    {
+      "state": "VA",
+      "n": 7475,
+      "positive_rate": 0.5175,
+      "roc_auc": 0.9112
+    }
+  ],
+  "directional_tests": [
+    {
+      "test": "Pluie forte (vs beau temps)",
+      "expected": "hausse",
+      "mean_delta_pts": 9.05,
+      "share_increase": 0.997,
+      "consistent": true
+    },
+    {
+      "test": "Neige légère (vs beau temps)",
+      "expected": "hausse",
+      "mean_delta_pts": 9.92,
+      "share_increase": 0.983,
+      "consistent": true
+    },
+    {
+      "test": "Brouillard, visibilité 0,5 mi",
+      "expected": "hausse",
+      "mean_delta_pts": 6.11,
+      "share_increase": 0.943,
+      "consistent": true
+    },
+    {
+      "test": "Nuit (23 h)",
+      "expected": "hausse",
+      "mean_delta_pts": 5.16,
+      "share_increase": 0.95,
+      "consistent": true
+    },
+    {
+      "test": "Heure de pointe (17 h)",
+      "expected": "hausse",
+      "mean_delta_pts": 0.97,
+      "share_increase": 0.27,
+      "consistent": true
+    },
+    {
+      "test": "Vent fort (35 mph)",
+      "expected": "hausse",
+      "mean_delta_pts": -0.6,
+      "share_increase": 0.487,
+      "consistent": false
+    },
+    {
+      "test": "Feu de signalisation",
+      "expected": "?",
+      "mean_delta_pts": -0.06,
+      "share_increase": 0.56,
+      "consistent": null
+    },
+    {
+      "test": "Intersection",
+      "expected": "?",
+      "mean_delta_pts": 7.14,
+      "share_increase": 0.883,
+      "consistent": null
+    }
+  ],
+  "location_only_spread": {
+    "n": 500,
+    "min": 0.0138,
+    "p10": 0.0458,
+    "median": 0.1396,
+    "p90": 0.52,
+    "max": 0.7746
+  }
+}

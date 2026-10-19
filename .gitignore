@@ -21,3 +21,7 @@ node_modules/
 # OS
 .DS_Store
 ml/models/*.pkl
+# Données locales de l'API
+api/data/local_db.json
+api/data/*.tmp
+frontend/dist/

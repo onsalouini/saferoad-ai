@@ -1,0 +1,15 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic[email]>=2.7
+httpx>=0.27
+python-dotenv>=1.0
+motor>=3.5
+bcrypt>=4.1
+PyJWT>=2.8
+joblib>=1.4
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.5
+lightgbm>=4.3
+# Évaluation du modèle (ml/evaluate.py)
+pyarrow>=16
