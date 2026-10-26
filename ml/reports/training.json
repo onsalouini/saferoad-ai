@@ -1,0 +1,107 @@
+{
+  "generated_at": "2026-10-26T10:32:03+00:00",
+  "data": {
+    "rows": 1102419,
+    "fit": 694245,
+    "valid": 86597,
+    "calibration": 87004,
+    "test": 234573,
+    "test_year": 2022
+  },
+  "best_iteration": 1992,
+  "features": 93,
+  "removed_features": [
+    "Distance(mi)"
+  ],
+  "calibration_params": {
+    "a": 1.2029687554336463,
+    "b": 0.014962493339798301
+  },
+  "thresholds": {
+    "standard": 0.5125,
+    "pro": 0.702,
+    "strict": 0.8674
+  },
+  "levels": {
+    "warning": 0.2696,
+    "serious": 0.5125,
+    "critical": 0.8674
+  },
+  "test_metrics": {
+    "roc_auc": 0.9,
+    "pr_auc": 0.8124,
+    "brier": 0.1207,
+    "mean_predicted": 0.3449,
+    "positive_rate": 0.3355
+  },
+  "test_calibration": [
+    {
+      "bin": "0.0-0.1",
+      "predicted": 0.0251,
+      "observed": 0.0336,
+      "count": 94753
+    },
+    {
+      "bin": "0.1-0.2",
+      "predicted": 0.1459,
+      "observed": 0.1686,
+      "count": 22264
+    },
+    {
+      "bin": "0.2-0.3",
+      "predicted": 0.2478,
+      "observed": 0.2704,
+      "count": 15409
+    },
+    {
+      "bin": "0.3-0.4",
+      "predicted": 0.3489,
+      "observed": 0.3623,
+      "count": 12756
+    },
+    {
+      "bin": "0.4-0.5",
+      "predicted": 0.4493,
+      "observed": 0.4389,
+      "count": 11463
+    },
+    {
+      "bin": "0.5-0.6",
+      "predicted": 0.5506,
+      "observed": 0.5134,
+      "count": 11195
+    },
+    {
+      "bin": "0.6-0.7",
+      "predicted": 0.65,
+      "observed": 0.5997,
+      "count": 11496
+    },
+    {
+      "bin": "0.7-0.8",
+      "predicted": 0.7512,
+      "observed": 0.6886,
+      "count": 12954
+    },
+    {
+      "bin": "0.8-0.9",
+      "predicted": 0.8536,
+      "observed": 0.7949,
+      "count": 17141
+    },
+    {
+      "bin": "0.9-1.0",
+      "predicted": 0.9485,
+      "observed": 0.9055,
+      "count": 25142
+    }
+  ],
+  "previous_model_on_same_test": {
+    "roc_auc": 0.881,
+    "pr_auc": 0.7759,
+    "brier": 0.1598,
+    "mean_predicted": 0.485,
+    "positive_rate": 0.3355,
+    "note": "v2 évaluée avec Distance fixée à 0 ; elle a pu voir ces accidents à l'entraînement (chiffres optimistes)."
+  }
+}

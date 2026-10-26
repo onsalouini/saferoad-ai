@@ -2,6 +2,7 @@ import { useState } from "react"
 import FactorBars from "../components/FactorBars"
 import PlaceSearch from "../components/PlaceSearch"
 import RiskGauge from "../components/RiskGauge"
+import ProfilePicker from "../components/ProfilePicker"
 import { Alert, Card, Segmented, Spinner, Toggle } from "../components/ui"
 import { api, errorMessage } from "../lib/api"
 import { MODES, WEATHER_FR, fmt } from "../lib/risk"
@@ -24,7 +25,7 @@ const INITIAL = {
   place: { lat: 39.7589, lng: -84.1916, label: "Dayton, Ohio" },
   when: localNow(),
   tempC: 13, humidity: 60, pressureHpa: 1013, visibilityKm: 16, windKmh: 10, precipMm: 0,
-  weather: "Fair", night: false, mode: "standard", road: {},
+  weather: "Fair", night: false, mode: "standard", road: {}, roadClass: "local", profile: "standard",
 }
 
 function NumField({ k, label, unit, value, onChange, step = 1, min, max }) {
@@ -76,7 +77,7 @@ export default function Simulator() {
         Weather_Condition: f.weather,
         Hour: d.getHours(), Month: d.getMonth() + 1, DayOfWeek: (d.getDay() + 6) % 7,
         IsNight: f.night,
-        mode: f.mode, ...f.road,
+        mode: f.mode, profile: f.profile, Road_Class: f.roadClass, ...f.road,
       })
       setResult(data)
     } catch (e2) { setError(errorMessage(e2)) } finally { setLoading(false) }
@@ -134,6 +135,11 @@ export default function Simulator() {
           </Card>
 
           <Card title="Route et mode">
+            <div className="mb-4">
+              <span className="label">Type de route</span>
+              <Segmented ariaLabel="Type de route" value={f.roadClass} onChange={set("roadClass")}
+                options={[{ value: "local", label: "Rue" }, { value: "highway", label: "Route" }, { value: "freeway", label: "Autoroute" }]} />
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {ROAD.map(([k, l]) => (
                 <Toggle key={k} label={l} checked={!!f.road[k]} onChange={(v) => setF((p) => ({ ...p, road: { ...p.road, [k]: v } }))} />
@@ -145,6 +151,7 @@ export default function Simulator() {
                 options={Object.entries(MODES).map(([value, m]) => ({ value, label: m.label, hint: m.hint }))} />
               <p className="mt-1.5 text-xs text-muted">{MODES[f.mode].hint}</p>
             </div>
+            <div className="mt-5"><ProfilePicker id="sim-profile" value={f.profile} onChange={set("profile")} /></div>
             <button type="submit" className="btn-primary mt-6 w-full py-3" disabled={loading}>
               {loading ? "Calcul…" : "Calculer le risque →"}
             </button>
@@ -172,6 +179,9 @@ export default function Simulator() {
                   <p className="mt-0.5 text-soft">{result.advice}</p>
                 </div>
                 <p className="mt-3 text-xs text-muted">État détecté : {result.inputs.State || "hors USA"}</p>
+                {result.profile_advice?.length > 0 && (
+                  <ul className="mt-3 list-disc space-y-0.5 pl-5 text-xs text-soft">{result.profile_advice.map((a) => <li key={a}>{a}</li>)}</ul>
+                )}
               </Card>
               <Card eyebrow="Explicabilité" title="Ce qui influence ce score">
                 <FactorBars factors={result.explanation.factors} />

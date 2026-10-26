@@ -1,14 +1,20 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
+import Assistant from "../components/Assistant"
 import DepartureChart from "../components/DepartureChart"
+import DrivingMode from "../components/DrivingMode"
 import FactorBars from "../components/FactorBars"
 import PlaceSearch from "../components/PlaceSearch"
+import ProfilePicker from "../components/ProfilePicker"
+import { LiveCard, PausesCard } from "../components/TripExtras"
 import RiskGauge from "../components/RiskGauge"
 import RouteMap from "../components/RouteMap"
+import SaveTrip from "../components/SaveTrip"
 import { Alert, Card, Segmented, Spinner, Stat, StatusBadge, Toggle } from "../components/ui"
 import { useAuth } from "../context/AuthContext"
 import { api, errorMessage } from "../lib/api"
-import { MODES, STATUS, fmt } from "../lib/risk"
+import { tripContext } from "../lib/assistant"
+import { MODES, ROAD_CLASS_FR, STATUS, fmt } from "../lib/risk"
 
 const ROAD = [
   ["Junction", "Intersections"], ["Traffic_Signal", "Feux"], ["Crossing", "Passages piétons"],
@@ -45,6 +51,7 @@ export default function Trip() {
   const [destination, setDestination] = useState(init.destination || null)
   const [mode, setMode] = useState(init.mode || "standard")
   const [road, setRoad] = useState({})
+  const [profile, setProfile] = useState(init.profile || "standard")
   const [showRoad, setShowRoad] = useState(false)
   const [result, setResult] = useState(null)
   const [selected, setSelected] = useState(0)
@@ -55,7 +62,7 @@ export default function Trip() {
     if (!o || !d) return
     setLoading(true); setError(null)
     try {
-      const { data } = await api.post("/predict/trip", { origin: o, destination: d, mode, road })
+      const { data } = await api.post("/predict/trip", { origin: o, destination: d, mode, road, profile })
       setResult(data); setSelected(data.recommended_route)
       const enc = (p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)},${p.label || ""}`
       window.history.replaceState(window.history.state, "",
@@ -114,6 +121,8 @@ export default function Trip() {
               <p className="mt-1.5 text-xs text-muted">{MODES[mode].hint}</p>
             </div>
 
+            <ProfilePicker value={profile} onChange={setProfile} />
+
             <div>
               <button type="button" className="text-sm text-soft hover:text-ink" onClick={() => setShowRoad((s) => !s)} aria-expanded={showRoad}>
                 {showRoad ? "▾" : "▸"} Caractéristiques de la route (optionnel)
@@ -165,21 +174,51 @@ export default function Trip() {
         </div>
       </div>
 
-      {result && route && <TripResult result={result} route={route} selected={selected} setSelected={setSelected} />}
+      {result && route && <TripResult result={result} route={route} selected={selected} setSelected={setSelected} onRefresh={() => analyse()} />}
     </div>
   )
 }
 
-function TripResult({ result, route, selected, setSelected }) {
+function TripResult({ result, route, selected, setSelected, onRefresh }) {
   const s = route.summary
   const best = route.best_departure
   const now = route.departures[0]
   const gain = now.risk_score - best.risk_score
   const worstSeg = route.segments.reduce((a, b) => (b.risk_score > a.risk_score ? b : a))
+  const context = useMemo(() => tripContext(result, selected), [result, selected])
+  const [driving, setDriving] = useState(false)
+  const roadCount = route.segments.filter((x) => x.road?.length).length
 
   return (
     <div className="space-y-6">
+      {driving && <DrivingMode result={result} route={route} onClose={() => setDriving(false)} />}
       {result.warnings.map((w) => <Alert key={w} tone="warning">{w}</Alert>)}
+
+      {(result.weather_alerts || []).length > 0 && (
+        <Card eyebrow="National Weather Service" title="Alertes météo officielles en cours">
+          <ul className="space-y-3">
+            {result.weather_alerts.map((a) => (
+              <li key={a.id} className="rounded-xl border border-critical/40 bg-critical/10 px-4 py-3 text-sm">
+                <p className="font-semibold text-ink">{a.event} <span className="font-normal text-soft">· gravité {a.severity_fr.toLowerCase()}</span></p>
+                <p className="mt-0.5 text-soft">{a.headline}</p>
+                {a.instruction && <p className="mt-1 text-xs text-muted">{a.instruction}</p>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => setDriving(true)} className="btn-primary">🚗 Mode conduite</button>
+        <SaveTrip origin={result.origin} destination={result.destination} mode={result.mode} profile={result.profile} />
+      </div>
+
+      {result.profile_advice?.length > 0 && (
+        <Alert tone="info" title={`Conseils · ${result.profile_label}`}>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">{result.profile_advice.map((a) => <li key={a}>{a}</li>)}</ul>
+          <p className="mt-1 text-xs text-muted">Seuil d'alerte abaissé à {Math.round(result.threshold_used * 100)} pour ce profil (règle de prudence, le modèle ne connaît pas le véhicule).</p>
+        </Alert>
+      )}
 
       {/* Synthèse */}
       <div className="grid gap-6 lg:grid-cols-12">
@@ -199,7 +238,8 @@ function TripResult({ result, route, selected, setSelected }) {
             <Stat label="Distance" value={fmt.num(route.distance_km, 0)} unit="km" />
             <Stat label="Durée estimée" value={fmt.duration(route.duration_min)} />
             <Stat label="Tronçon le plus risqué" value={fmt.num(worstSeg.risk_score, 0)} unit="/ 100" hint={`au km ${fmt.num(worstSeg.km, 0)}`} />
-            <Stat label="Points analysés" value={route.segments.length} hint="météo à l'heure de passage" />
+            <Stat label="Points analysés" value={route.segments.length}
+              hint={result.road_source === "openstreetmap" ? `équipements OSM sur ${roadCount}` : "météo à l'heure de passage"} />
           </div>
 
           <Card eyebrow="Recommandation" title="Meilleur moment pour partir">
@@ -247,6 +287,17 @@ function TripResult({ result, route, selected, setSelected }) {
         <DepartureChart departures={route.departures} threshold={s.threshold_used} best={best} />
       </Card>
 
+      <Card eyebrow="Copilote IA" title="Briefing et questions sur ce trajet">
+        <Assistant key={`${result.generated_at}-${selected}`} context={context} autoPrompt="Fais-moi un briefing de ce trajet"
+          intro="Le copilote lit cette analyse (itinéraires, météo au passage, créneaux) et vous l'explique en clair."
+          suggestions={["Pourquoi ce tronçon est-il le plus risqué ?", "Quel itinéraire choisir ?", "Conseils pour conduire de nuit sous la pluie"]} />
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <LiveCard result={result} route={route} onReported={onRefresh} />
+        <PausesCard route={route} />
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card eyebrow="Explicabilité" title={`Pourquoi ce score ? (tronçon le plus risqué, km ${fmt.num(route.peak.km, 0)})`}>
           <FactorBars factors={route.explanation.factors} />
@@ -258,8 +309,8 @@ function TripResult({ result, route, selected, setSelected }) {
               <thead>
                 <tr className="text-left text-xs text-muted">
                   <th className="px-3 py-2 font-medium">Km</th>
-                  <th className="px-3 py-2 font-medium">État</th>
-                  <th className="px-3 py-2 font-medium">Météo au passage</th>
+                  <th className="px-3 py-2 font-medium">Route</th>
+                  <th className="px-3 py-2 font-medium">Météo au passage · équipements</th>
                   <th className="px-3 py-2 font-medium text-right">Indice</th>
                   <th className="px-3 py-2 font-medium">Niveau</th>
                 </tr>
@@ -268,10 +319,15 @@ function TripResult({ result, route, selected, setSelected }) {
                 {route.segments.map((seg, i) => (
                   <tr key={i} className="border-t border-line/50">
                     <td className="px-3 py-2 tnum text-soft">{fmt.num(seg.km, 0)}</td>
-                    <td className="px-3 py-2">{seg.state || <span className="text-muted">hors USA</span>}</td>
+                    <td className="px-3 py-2">
+                      <span className="block">{ROAD_CLASS_FR[seg.road_class] || "—"}{seg.road_name && <span className="text-xs text-muted"> · {seg.road_name}</span>}</span>
+                      <span className="text-xs text-muted">{seg.state || "hors USA"}</span>
+                    </td>
                     <td className="px-3 py-2 text-soft">
                       {seg.weather.weather_label}, {fmt.fToC(seg.weather.Temperature_F)} °C
                       {seg.weather.IsNight && <span className="ml-1 text-muted">· nuit</span>}
+                      {seg.road?.length > 0 && <span className="block text-xs text-muted">{seg.road.join(", ")}</span>}
+                      {seg.glare && <span className="block text-xs text-warning">☀ soleil bas face à vous ({seg.glare.sun_elevation}°)</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-semibold tnum">{fmt.num(seg.risk_score)}</td>
                     <td className="px-3 py-2"><StatusBadge status={seg.status} /></td>
@@ -284,9 +340,10 @@ function TripResult({ result, route, selected, setSelected }) {
       </div>
 
       <p className="text-xs text-muted">
-        Lecture : l'indice (0-100) est le score du modèle LightGBM entraîné sur 7,7 M d'accidents américains ; il estime la
-        propension d'un accident à être <b>grave</b> dans ces conditions et a tendance à surestimer les valeurs moyennes
-        (voir <Link to="/modele" className="text-accent hover:underline">fiabilité du modèle</Link>).
+        Lecture : l'indice (0-100) est le score du modèle LightGBM entraîné sur des accidents américains ; il estime la
+        probabilité qu'un accident survenant dans ces conditions soit <b>grave</b>, pas la probabilité d'avoir un accident
+        (voir <Link to="/modele" className="text-accent hover:underline">fiabilité du modèle</Link>). Équipements routiers :
+        OpenStreetMap ; alertes : National Weather Service.
         Niveaux : {Object.values(STATUS).map((x) => x.label).join(" < ")}.
       </p>
     </div>

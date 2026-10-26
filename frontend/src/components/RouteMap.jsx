@@ -70,6 +70,32 @@ export default function RouteMap({ origin, destination, routes = [], selected = 
         </CircleMarker>
       ))}
 
+      {routes[selected]?.segments.filter((s) => s.glare).map((s, i) => (
+        <CircleMarker key={`sun-${i}`} center={[s.lat, s.lng]} radius={12} interactive={false}
+          pathOptions={{ color: "#fab219", weight: 2, dashArray: "3 4", fill: false }} />
+      ))}
+
+      {routes[selected]?.pauses?.map((p, i) => (
+        <CircleMarker key={`pause-${i}`} center={[p.lat, p.lng]} radius={7}
+          pathOptions={{ color: "#f0efec", weight: 2, fillColor: "#3987e5", fillOpacity: 0.9 }}>
+          <Tooltip direction="top" offset={[0, -6]}>Pause conseillée {i + 1} · après {fmt.duration(p.after_min)} de route</Tooltip>
+        </CircleMarker>
+      ))}
+
+      {(routes[selected]?.incidents || []).filter((x) => x.lat != null).map((x) => (
+        <CircleMarker key={`inc-${x.id}`} center={[x.lat, x.lng]} radius={7}
+          pathOptions={{ color: "#161b22", weight: 2, fillColor: "#fab219", fillOpacity: 1 }}>
+          <Tooltip direction="top" offset={[0, -6]}>{x.category}{x.delay_min > 0 ? ` · +${x.delay_min} min` : ""}</Tooltip>
+        </CircleMarker>
+      ))}
+
+      {(routes[selected]?.reports || []).map((r) => (
+        <CircleMarker key={`rep-${r.id}`} center={[r.lat, r.lng]} radius={7}
+          pathOptions={{ color: "#f0efec", weight: 2, fillColor: "#d03b3b", fillOpacity: 1 }}>
+          <Tooltip direction="top" offset={[0, -6]}>⚠ {r.label}{r.comment ? ` · ${r.comment}` : ""}</Tooltip>
+        </CircleMarker>
+      ))}
+
       {origin && (
         <CircleMarker center={[origin.lat, origin.lng]} radius={9}
           pathOptions={{ color: "#f0efec", weight: 3, fillColor: "#3987e5", fillOpacity: 1 }}>

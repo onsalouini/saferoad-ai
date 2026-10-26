@@ -1,0 +1,9 @@
+venv/
+**/__pycache__/
+**/node_modules/
+frontend/dist/
+data/
+ml/models/
+api/data/local_db.json
+api/.env
+.git/

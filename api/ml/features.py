@@ -9,6 +9,8 @@ ce qui garantit que l'on évalue exactement ce que l'API envoie au modèle.
 """
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -37,6 +39,28 @@ ROAD_FEATURES = [
 ]
 
 RUSH_HOURS = {7, 8, 9, 16, 17, 18, 19}
+
+# Type de route (v4), déduit du nom de la rue dans US Accidents (« I-95 N », « Golden State Fwy S »,
+# « US-101 N », « CA-91 W », « Main St ») et des noms / références OSRM à l'inférence (« I 70 », « Interstate 70 »).
+# Sans cette variable, le modèle confondait « en ville » et « équipements urbains » (feu = -31 pts).
+ROAD_CLASSES = ["freeway", "highway", "local"]
+ROAD_CLASS_FEATURES = ["Road_Freeway", "Road_Highway"]  # "local" = référence
+_FREEWAY = re.compile(r"(^|[\s;(])(I[-\s]?\d+|Interstate\b)"
+                      r"|\b(Fwy|Freeway|Expy|Expressway|Tpke|Turnpike|Tollway|Beltway|Thruway|Motorway|Parkway)\b", re.I)
+_HIGHWAY = re.compile(r"(^|[\s;(])(US|SR|[A-Z]{2})[-\s]?\d+"
+                      r"|\b(Hwy|Highway|State Route|Route|Rte|Pike)\b", re.I)
+
+
+def road_class(*names: str | None) -> str:
+    """« freeway » (autoroute, voie rapide), « highway » (route fédérale / d'État) ou « local »."""
+    text = " ; ".join(n for n in names if n)
+    if not text:
+        return "local"
+    if _FREEWAY.search(text):
+        return "freeway"
+    if _HIGHWAY.search(text):
+        return "highway"
+    return "local"
 
 # Valeur utilisée pour Distance(mi) à l'inférence.
 # Distance(mi) = longueur de route impactée PAR l'accident : elle n'est pas
@@ -77,6 +101,8 @@ GROUP_LABELS = {
     "Traffic_Calming": "Zone apaisée",
     "Station": "Station",
     "Turning_Loop": "Boucle de demi-tour",
+    "Road_Freeway": "Autoroute / voie rapide",
+    "Road_Highway": "Route nationale / d'État",
 }
 
 
@@ -159,6 +185,9 @@ def build_row(data: dict) -> dict:
     }
     for f in ROAD_FEATURES:
         row[f] = int(bool(data.get(f, 0)))
+    rc = data.get("Road_Class") or road_class(data.get("Street"))
+    row["Road_Freeway"] = int(rc == "freeway")
+    row["Road_Highway"] = int(rc == "highway")
 
     weather = normalize_weather(data.get("Weather_Condition"))
     for w in MODEL_WEATHER:

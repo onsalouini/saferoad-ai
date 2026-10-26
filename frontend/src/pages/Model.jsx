@@ -19,6 +19,8 @@ export default function Model() {
 
   const ev = info.evaluation
   const m = ev?.metrics
+  const tr = info.training
+  const t = (mode) => ev?.thresholds.find((x) => x.mode === mode)
 
   return (
     <div className="mx-auto max-w-page px-4 py-8 space-y-6">
@@ -26,8 +28,9 @@ export default function Model() {
         <p className="eyebrow">Le modèle</p>
         <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight">Fiabilité du modèle SafeRoad AI</h1>
         <p className="mt-2 max-w-3xl text-soft">
-          {info.algorithm} · {info.n_features} variables · évalué de façon indépendante sur
-          {ev ? ` ${fmt.int(ev.dataset.rows_evaluated)} accidents réels` : " (rapport d'évaluation absent)"}.
+          Version {info.version} · {info.algorithm} · {info.n_features} variables · évalué
+          {ev?.dataset.held_out_years ? ` sur l'année ${ev.dataset.held_out_years.join(", ")}, jamais vue à l'entraînement,` : ""}
+          {ev ? ` sur ${fmt.int(ev.dataset.rows_evaluated)} accidents réels` : " (rapport d'évaluation absent)"}.
           Cette page présente ce que le modèle prédit réellement, ses performances et ses limites.
         </p>
       </header>
@@ -37,11 +40,21 @@ export default function Model() {
       {ev && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Stat label="ROC-AUC mesuré" value={fmt.num(m.roc_auc_distance_fixed, 3)} hint={`annoncé : ${fmt.num(info.declared_roc_auc, 4)}`} />
+            <Stat label="ROC-AUC mesuré" value={fmt.num(m.roc_auc_distance_fixed, 3)} hint={tr ? `v2 sur le même test : ${fmt.num(tr.previous_model_on_same_test.roc_auc, 3)}` : `annoncé : ${fmt.num(info.declared_roc_auc, 4)}`} />
             <Stat label="PR-AUC" value={fmt.num(m.pr_auc_distance_fixed, 3)} hint={`taux de base : ${fmt.pct(ev.dataset.positive_rate)}`} />
-            <Stat label="Score de Brier" value={fmt.num(m.brier_distance_fixed, 3)} hint="0 = parfait · plus bas = mieux" />
+            <Stat label="Score de Brier" value={fmt.num(m.brier_distance_fixed, 3)} hint={tr ? `v2 : ${fmt.num(tr.previous_model_on_same_test.brier, 3)} · plus bas = mieux` : "0 = parfait · plus bas = mieux"} />
             <Stat label="Accidents évalués" value={fmt.int(ev.dataset.rows_evaluated)} hint={`années ${ev.dataset.years.join(", ")}`} />
           </div>
+
+          {tr && (
+            <Card eyebrow="Version 3" title="Ce qui a changé par rapport à la v2">
+              <ul className="grid gap-3 text-sm text-soft sm:grid-cols-3">
+                <li className="rounded-xl bg-raised/60 px-4 py-3"><b className="text-ink">Fuite de données supprimée.</b> <code>Distance(mi)</code> (longueur impactée par l'accident, inconnue avant le trajet) n'est plus utilisée.</li>
+                <li className="rounded-xl bg-raised/60 px-4 py-3"><b className="text-ink">Test honnête.</b> Entraînement sur {fmt.int(tr.data.fit)} accidents (2016, 2017, 2021), test sur {fmt.int(tr.data.test)} accidents de {tr.data.test_year}.</li>
+                <li className="rounded-xl bg-raised/60 px-4 py-3"><b className="text-ink">Score recalibré.</b> Prédit en moyenne {fmt.pct(tr.test_metrics.mean_predicted, 1)} pour {fmt.pct(tr.test_metrics.positive_rate, 1)} observés (v2 : {fmt.pct(tr.previous_model_on_same_test.mean_predicted, 1)}).</li>
+              </ul>
+            </Card>
+          )}
 
           <Card eyebrow="À lire en premier" title="Ce que le modèle prédit réellement">
             <div className="grid gap-5 lg:grid-cols-2 text-sm text-soft leading-relaxed">
@@ -70,13 +83,14 @@ export default function Model() {
           </Card>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card eyebrow="Calibration" title="Le score surestime la probabilité réelle">
+            <Card eyebrow="Calibration" title={info.calibrated ? "Le score correspond à la fréquence observée" : "Le score surestime la probabilité réelle"}>
               <CalibrationChart bins={ev.calibration} />
               <p className="mt-3 text-sm text-soft">
-                La courbe est sous la diagonale : un score de 45 correspond en réalité à environ
+                Un score entre 40 et 50 correspond en réalité à
                 {" "}{fmt.pct(ev.calibration.find((b) => b.bin === "0.4-0.5")?.observed ?? 0, 0)} d'accidents graves.
-                C'est l'effet de <code>scale_pos_weight = {info.hyperparameters.scale_pos_weight}</code> à l'entraînement.
-                Le classement des situations reste bon (AUC), mais le score ne doit pas être lu comme un pourcentage.
+                {info.calibrated
+                  ? " Grâce à la recalibration de Platt, le score se lit comme un pourcentage : la probabilité qu'un accident survenant dans ces conditions soit grave. Les scores très élevés restent légèrement optimistes (prédit 95 %, observé 91 %)."
+                  : <> C'est l'effet de <code>scale_pos_weight = {info.hyperparameters.scale_pos_weight}</code> à l'entraînement : le score ne doit pas être lu comme un pourcentage.</>}
               </p>
             </Card>
 
@@ -108,8 +122,8 @@ export default function Model() {
                 </table>
               </div>
               <p className="mt-3 px-3 text-sm text-soft">
-                <b className="text-ink">Standard</b> détecte 8 accidents graves sur 10 (meilleur F1).
-                <b className="text-ink"> Strict</b> se trompe rarement (86 % de précision) mais en manque plus de la moitié.
+                <b className="text-ink">Standard</b> détecte {t("standard") ? fmt.pct(t("standard").recall, 0) : "—"} des accidents graves (meilleur F1).
+                <b className="text-ink"> Strict</b> se trompe rarement ({t("strict") ? fmt.pct(t("strict").precision, 0) : "—"} de précision) mais en manque davantage.
               </p>
             </Card>
           </div>
@@ -134,7 +148,10 @@ export default function Model() {
             <Card eyebrow="Stabilité dans le temps" title="ROC-AUC par année">
               <HBarList items={ev.by_year.map((y) => ({ label: String(y.year), value: y.roc_auc_distance_fixed }))}
                 max={1} format={(v) => fmt.num(v, 3)} labelWidth="5rem" />
-              <p className="mt-3 text-sm text-soft">Légère baisse sur les données récentes (2021-2022) : un réentraînement périodique est conseillé.</p>
+              <p className="mt-3 text-sm text-soft">
+                {ev.by_year.length > 1 ? "Légère baisse sur les données récentes : un réentraînement périodique est conseillé."
+                  : "Évaluation limitée à l'année de test (non vue à l'entraînement) ; seul un fragment du dataset est disponible."}
+              </p>
             </Card>
             <Card eyebrow="Stabilité géographique" title="ROC-AUC par État (12 plus représentés)">
               <HBarList items={ev.by_state.map((s) => ({ label: s.state, value: s.roc_auc }))}
@@ -180,20 +197,22 @@ export default function Model() {
               <div>
                 <h3 className="mb-2 font-semibold text-good">✓ Points forts</h3>
                 <ul className="space-y-2 text-soft list-disc pl-5">
-                  <li>Bon pouvoir de classement : ROC-AUC de {fmt.num(m.roc_auc_distance_fixed, 3)} sur données réelles, conforme à l'annonce.</li>
+                  <li>Bon pouvoir de classement : ROC-AUC de {fmt.num(m.roc_auc_distance_fixed, 3)} sur une année jamais vue.</li>
                   <li>Performance homogène entre États (AUC {fmt.num(Math.min(...ev.by_state.map((s) => s.roc_auc)), 2)}–{fmt.num(Math.max(...ev.by_state.map((s) => s.roc_auc)), 2)}) et entre années.</li>
-                  <li>Réactions cohérentes à la pluie, la neige, le brouillard et la nuit.</li>
+                  <li>Réactions cohérentes à la pluie, au brouillard et à la nuit.</li>
+                  {info.calibrated && <li>Score calibré : lisible comme une probabilité de gravité.</li>}
                 </ul>
               </div>
               <div>
                 <h3 className="mb-2 font-semibold text-serious">⚠ Limites</h3>
                 <ul className="space-y-2 text-soft list-disc pl-5">
                   <li>Prédit la <b className="text-ink">gravité</b> d'un accident, pas la probabilité qu'il survienne.</li>
-                  <li>Scores non calibrés (surestimation) : à lire comme un indice relatif.</li>
                   <li>Forte dépendance au lieu : à conditions identiques, le score varie de {Math.round(ev.location_only_spread.min * 100)} à {Math.round(ev.location_only_spread.max * 100)} selon l'endroit.</li>
-                  <li><code>Distance(mi)</code> est une fuite de données (connue après l'accident) : fixée à {ev.dataset.distance_median_mi} à l'inférence.</li>
-                  <li>Valide uniquement aux États-Unis ; le vent fort n'augmente pas le score.</li>
-                  <li>Évaluation sur un fragment du dataset qui a pu servir à l'entraînement : chiffres possiblement optimistes.</li>
+                  {!info.calibrated && <li>Scores non calibrés (surestimation) : à lire comme un indice relatif.</li>}
+                  {!info.calibrated && <li><code>Distance(mi)</code> est une fuite de données (connue après l'accident).</li>}
+                  <li>Les équipements urbains (feux) font <b className="text-ink">baisser</b> le score : en ville, les accidents sont plus fréquents mais moins graves (vitesses plus basses).</li>
+                  <li>Valide uniquement aux États-Unis ; la neige et le vent fort n'augmentent pas le score.</li>
+                  <li>Entraîné sur un seul fragment (1,1 M d'accidents sur 7,7 M) : les performances peuvent encore progresser.</li>
                 </ul>
               </div>
             </div>

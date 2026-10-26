@@ -2,16 +2,53 @@
 """Géocodage (Nominatim / OpenStreetMap), itinéraires (OSRM) et détection de l'État US."""
 from __future__ import annotations
 
+import asyncio
 import json
 import math
+import os
+import time
 from functools import lru_cache
 from pathlib import Path
 
 import httpx
 
-NOMINATIM = "https://nominatim.openstreetmap.org"
-OSRM = "https://router.project-osrm.org"
-HEADERS = {"User-Agent": "SafeRoadAI/1.0 (academic project)", "Accept-Language": "fr,en"}
+from ml.features import road_class
+
+from .cache import TTLCache
+
+# Instances publiques par défaut ; à remplacer par des instances auto-hébergées en production
+NOMINATIM = os.getenv("NOMINATIM_URL", "https://nominatim.openstreetmap.org").rstrip("/")
+OSRM = os.getenv("OSRM_URL", "https://router.project-osrm.org").rstrip("/")
+HEADERS = {"User-Agent": os.getenv("HTTP_USER_AGENT", "SafeRoadAI/3.0 (academic project)"), "Accept-Language": "fr,en"}
+
+# Politique d'usage de Nominatim public : 1 requête par seconde au maximum
+NOMINATIM_MIN_INTERVAL_S = float(os.getenv("NOMINATIM_MIN_INTERVAL_S", "1.0"))
+_nominatim_lock = asyncio.Lock()
+_nominatim_last = 0.0
+_search_cache = TTLCache(24 * 3600, 1000)
+_route_cache = TTLCache(3600, 300)
+
+
+async def _nominatim(path: str, params: dict) -> object:
+    """Appel Nominatim mis en cache et espacé d'au moins NOMINATIM_MIN_INTERVAL_S."""
+    global _nominatim_last
+    key = TTLCache.key(path, params)
+    hit = _search_cache.get(key)
+    if hit is not None:
+        return hit
+    async with _nominatim_lock:
+        wait = NOMINATIM_MIN_INTERVAL_S - (time.monotonic() - _nominatim_last)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        try:
+            async with httpx.AsyncClient(timeout=10, headers=HEADERS) as c:
+                r = await c.get(f"{NOMINATIM}/{path}", params=params)
+                r.raise_for_status()
+        finally:
+            _nominatim_last = time.monotonic()
+    data = r.json()
+    _search_cache.set(key, data)
+    return data
 
 STATE_CODES = {
     "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA",
@@ -67,11 +104,7 @@ def state_at(lat: float, lng: float) -> str | None:
 
 # ------------------------------------------------------------------ Nominatim
 async def search(query: str, limit: int = 6) -> list[dict]:
-    async with httpx.AsyncClient(timeout=10, headers=HEADERS) as c:
-        r = await c.get(f"{NOMINATIM}/search", params={
-            "q": query, "format": "jsonv2", "limit": limit, "addressdetails": 1,
-        })
-        r.raise_for_status()
+    items = await _nominatim("search", {"q": query.strip(), "format": "jsonv2", "limit": limit, "addressdetails": 1})
     return [
         {
             "label": item["display_name"],
@@ -80,17 +113,14 @@ async def search(query: str, limit: int = 6) -> list[dict]:
             "lng": float(item["lon"]),
             "country_code": (item.get("address") or {}).get("country_code", "").upper(),
         }
-        for item in r.json()
+        for item in items
     ]
 
 
 async def reverse(lat: float, lng: float) -> dict:
-    async with httpx.AsyncClient(timeout=10, headers=HEADERS) as c:
-        r = await c.get(f"{NOMINATIM}/reverse", params={
-            "lat": lat, "lon": lng, "format": "jsonv2", "zoom": 14, "addressdetails": 1,
-        })
-        r.raise_for_status()
-    item = r.json()
+    item = await _nominatim("reverse", {
+        "lat": round(lat, 5), "lon": round(lng, 5), "format": "jsonv2", "zoom": 14, "addressdetails": 1,
+    })
     addr = item.get("address") or {}
     return {
         "label": item.get("display_name", f"{lat:.4f}, {lng:.4f}"),
@@ -103,25 +133,55 @@ async def reverse(lat: float, lng: float) -> dict:
 
 
 # ----------------------------------------------------------------------- OSRM
-async def route(origin: tuple[float, float], destination: tuple[float, float]) -> dict:
-    """Itinéraire routier (lat, lng) -> géométrie [[lat, lng], ...], distance (km), durée (min)."""
-    coords = f"{origin[1]},{origin[0]};{destination[1]},{destination[0]}"
+async def route(origin: tuple[float, float], destination: tuple[float, float]) -> list[dict]:
+    """Itinéraires routiers (lat, lng) -> géométrie [[lat, lng], ...], distance (km), durée (min)."""
+    coords = f"{origin[1]:.5f},{origin[0]:.5f};{destination[1]:.5f},{destination[0]:.5f}"
+    hit = _route_cache.get(coords)
+    if hit is not None:
+        return [{**r, "geometry": list(r["geometry"])} for r in hit]
     async with httpx.AsyncClient(timeout=20, headers=HEADERS) as c:
         r = await c.get(f"{OSRM}/route/v1/driving/{coords}", params={
-            "overview": "full", "geometries": "geojson", "alternatives": "true",
+            "overview": "full", "geometries": "geojson", "alternatives": "true", "steps": "true",
         })
         r.raise_for_status()
     data = r.json()
     if data.get("code") != "Ok" or not data.get("routes"):
         raise ValueError("Aucun itinéraire routier trouvé entre ces deux points.")
-    return [
-        {
-            "geometry": [[p[1], p[0]] for p in rt["geometry"]["coordinates"]],
+    routes = []
+    for rt in data["routes"]:
+        geometry = [[p[1], p[0]] for p in rt["geometry"]["coordinates"]]
+        names, classes = _step_roads(rt, len(geometry))
+        routes.append({
+            "geometry": geometry,
+            "road_names": names,
+            "road_classes": classes,
             "distance_km": round(rt["distance"] / 1000, 1),
             "duration_min": round(rt["duration"] / 60),
-        }
-        for rt in data["routes"]
-    ]
+        })
+    _route_cache.set(coords, routes)
+    return routes
+
+
+def _step_roads(rt: dict, n_points: int) -> tuple[list[str], list[str]]:
+    """Nom et type de route (autoroute / route / rue) pour chaque point de la géométrie complète.
+
+    La géométrie « overview=full » est la concaténation des géométries des étapes (points de jonction
+    partagés) : chaque étape couvre len(coordonnées) - 1 points.
+    """
+    names: list[str] = []
+    classes: list[str] = []
+    for leg in rt.get("legs", []):
+        for step in leg.get("steps", []):
+            label = " / ".join(x for x in (step.get("ref"), step.get("name")) if x)
+            cls = road_class(step.get("ref"), step.get("name"))
+            k = max(1, len(step.get("geometry", {}).get("coordinates", [])) - 1)
+            names.extend([label] * k)
+            classes.extend([cls] * k)
+    if not classes:
+        return [""] * n_points, ["local"] * n_points
+    names += [names[-1]] * max(0, n_points - len(names))
+    classes += [classes[-1]] * max(0, n_points - len(classes))
+    return names[:n_points], classes[:n_points]
 
 
 def haversine_km(a: list[float], b: list[float]) -> float:

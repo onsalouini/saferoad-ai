@@ -1,0 +1,47 @@
+# SafeRoad AI : MongoDB + API + frontend.
+#   cp api/.env.example api/.env   (définir JWT_SECRET, ANTHROPIC_API_KEY, SMTP_* si besoin)
+#   docker compose up --build      -> http://localhost:8080 (frontend), http://localhost:8000/docs (API)
+# Le modèle ml/models/saferoad_model.pkl doit être présent (monté en lecture seule).
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    env_file: api/.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      CORS_ORIGINS: http://localhost:8080
+      FRONTEND_URL: http://localhost:8080
+    volumes:
+      - ./ml/models:/app/ml/models:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  mongo-data:

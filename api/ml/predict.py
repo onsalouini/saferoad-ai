@@ -14,14 +14,16 @@ from .features import GROUP_LABELS, build_row, group_contributions, to_frame
 ROOT = Path(__file__).resolve().parents[2]
 MODEL_PATH = Path(os.getenv("MODEL_PATH", ROOT / "ml" / "models" / "saferoad_model.pkl"))
 REPORT_PATH = ROOT / "ml" / "reports" / "evaluation.json"
+TRAINING_PATH = ROOT / "ml" / "reports" / "training.json"
 
-# Niveaux de risque (bornes basses sur la probabilité)
-LEVELS = [
-    (0.80, "Très élevé", "critical", "Risque très élevé : départ fortement déconseillé dans ces conditions."),
-    (0.65, "Élevé", "serious", "Conditions dangereuses : envisagez un autre horaire ou itinéraire."),
-    (0.40, "Modéré", "warning", "Quelques facteurs de risque : prudence recommandée."),
-    (0.00, "Faible", "good", "Conditions favorables, aucun facteur de risque marqué."),
-]
+# Niveaux de risque : libellés et conseils ; les bornes viennent du modèle (v3) ou des valeurs v2
+LEVEL_TEXT = {
+    "critical": ("Très élevé", "Risque très élevé : départ fortement déconseillé dans ces conditions."),
+    "serious": ("Élevé", "Conditions dangereuses : envisagez un autre horaire ou itinéraire."),
+    "warning": ("Modéré", "Quelques facteurs de risque : prudence recommandée."),
+    "good": ("Faible", "Conditions favorables, aucun facteur de risque marqué."),
+}
+DEFAULT_LEVELS = {"warning": 0.40, "serious": 0.65, "critical": 0.80}
 
 
 class ModelService:
@@ -29,12 +31,30 @@ class ModelService:
         self.model = None
         self.feature_names: list[str] = []
         self.thresholds = {"standard": 0.65, "pro": 0.75, "strict": 0.85}
+        self.level_bounds = dict(DEFAULT_LEVELS)
+        self.version = "2.0"
+        self.calibrated = False
         self.roc_auc: float | None = None
         self.error: str | None = None
         self.load()
 
+    @staticmethod
+    def _download() -> None:
+        """Déploiement : télécharge le modèle depuis MODEL_URL s'il n'est pas présent sur le disque."""
+        url = os.getenv("MODEL_URL")
+        if MODEL_PATH.exists() or not url:
+            return
+        import urllib.request
+
+        MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = MODEL_PATH.with_suffix(".part")
+        print(f"Téléchargement du modèle : {url}")
+        urllib.request.urlretrieve(url, tmp)
+        tmp.replace(MODEL_PATH)
+
     def load(self) -> None:
         try:
+            self._download()
             data = joblib.load(MODEL_PATH)
             self.model = data["model"]
             self.feature_names = list(data["feature_names"])
@@ -43,6 +63,9 @@ class ModelService:
                 "pro": float(data.get("threshold_pro", 0.75)),
                 "strict": float(data.get("threshold_strict", 0.85)),
             }
+            self.level_bounds = {k: float(v) for k, v in (data.get("levels") or DEFAULT_LEVELS).items()}
+            self.version = str(data.get("version", "2.0"))
+            self.calibrated = bool(data.get("calibrated", False))
             self.roc_auc = data.get("roc_auc")
             print(f"Modele charge : {len(self.feature_names)} variables ({MODEL_PATH})")
         except Exception as e:  # noqa: BLE001
@@ -65,15 +88,18 @@ class ModelService:
         return base, group_contributions(contrib[:-1], self.feature_names)
 
     # --------------------------------------------------------------- helpers
-    @staticmethod
-    def level(proba: float) -> dict:
-        for bound, label, status, text in LEVELS:
-            if proba >= bound:
-                return {"label": label, "status": status, "advice": text}
-        return {"label": "Faible", "status": "good", "advice": LEVELS[-1][3]}
+    def level(self, proba: float) -> dict:
+        status = "good"
+        for name in ("warning", "serious", "critical"):
+            if proba >= self.level_bounds[name]:
+                status = name
+        label, text = LEVEL_TEXT[status]
+        return {"label": label, "status": status, "advice": text}
 
-    def assess(self, proba: float, mode: str) -> dict:
-        threshold = self.thresholds.get(mode, self.thresholds["standard"])
+    def assess(self, proba: float, mode: str, threshold: float | None = None) -> dict:
+        """threshold : seuil d'alerte imposé (profils de conducteur) ; sinon celui du mode."""
+        if threshold is None:
+            threshold = self.thresholds.get(mode, self.thresholds["standard"])
         lvl = self.level(proba)
         return {
             "probability": round(float(proba), 4),
@@ -90,7 +116,7 @@ class ModelService:
         base, groups = self.contributions(situation)
         # Distance(mi) est fixe à l'inférence : sa contribution est un décalage constant,
         # pas un facteur propre à la situation -> intégrée à la valeur de base.
-        base += groups.pop("Distance(mi)", 0.0)
+        base += groups.pop("Distance(mi)", 0.0)  # modèles v2 uniquement
         items = sorted(groups.items(), key=lambda kv: abs(kv[1]), reverse=True)
         factors = [
             {
@@ -128,11 +154,17 @@ class ModelService:
         report = None
         if REPORT_PATH.exists():
             report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+        training = None
+        if TRAINING_PATH.exists() and self.calibrated:
+            training = json.loads(TRAINING_PATH.read_text(encoding="utf-8"))
         params = self.model.get_params() if self.ready else {}
         return {
             "ready": self.ready,
             "error": self.error,
-            "algorithm": type(self.model).__name__ if self.ready else None,
+            "algorithm": "LGBMClassifier + recalibration de Platt" if self.calibrated else (type(self.model).__name__ if self.ready else None),
+            "version": self.version,
+            "calibrated": self.calibrated,
+            "levels": self.level_bounds,
             "n_features": len(self.feature_names),
             "declared_roc_auc": self.roc_auc,
             "thresholds": self.thresholds,
@@ -143,6 +175,7 @@ class ModelService:
             },
             "feature_importance": importances,
             "evaluation": report,
+            "training": training,
         }
 
 

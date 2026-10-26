@@ -9,22 +9,17 @@ from database import db
 router = APIRouter(prefix="/history", tags=["Historique"])
 
 
-def _clean(doc: dict) -> dict:
-    return {("id" if k == "_id" else k): v for k, v in doc.items() if k != "user_id"}
-
-
 @router.get("")
 async def list_history(limit: int = Query(50, ge=1, le=200), user: dict = Depends(current_user)):
-    docs = await db().find("history", {"user_id": user["_id"]}, limit=limit)
-    return [_clean(d) for d in docs]
+    return await db().list_items(user["_id"], "history", limit)
 
 
 @router.delete("/{item_id}", status_code=204)
 async def delete_item(item_id: str, user: dict = Depends(current_user)):
-    if not await db().delete("history", {"_id": item_id, "user_id": user["_id"]}):
+    if not await db().pull_item(user["_id"], "history", item_id):
         raise HTTPException(404, "Élément introuvable")
 
 
 @router.delete("", status_code=204)
 async def clear_history(user: dict = Depends(current_user)):
-    await db().delete("history", {"user_id": user["_id"]})
+    await db().clear_items(user["_id"], "history")

@@ -2,7 +2,7 @@
 Évaluation de la fiabilité du modèle SafeRoad AI.
 
 Usage :
-    python ml/evaluate.py --data data/raw/shard0.parquet [--sample 300000]
+    python ml/evaluate.py --data data/raw/shard0.parquet [--sample 300000] [--years 2022]
 
 Produit :
     ml/reports/evaluation.json   (consommé par l'API -> page « Modèle »)
@@ -37,6 +37,7 @@ sys.path.insert(0, str(ROOT / "api"))
 from ml.features import (  # noqa: E402
     MODEL_WEATHER,
     ROAD_FEATURES,
+    road_class,
     RUSH_HOURS,
     STATES,
     build_row,
@@ -53,7 +54,7 @@ def load(path: str, sample: int) -> pd.DataFrame:
     cols = [
         "Severity", "Start_Time", "Start_Lat", "Start_Lng", "Distance(mi)", "State",
         "Temperature(F)", "Humidity(%)", "Pressure(in)", "Visibility(mi)",
-        "Wind_Speed(mph)", "Precipitation(in)", "Weather_Condition", "Sunrise_Sunset",
+        "Wind_Speed(mph)", "Precipitation(in)", "Weather_Condition", "Sunrise_Sunset", "Street",
         *ROAD_FEATURES,
     ]
     df = pd.read_parquet(path, columns=cols)
@@ -90,6 +91,11 @@ def engineer(df: pd.DataFrame, feature_names: list[str], night_is_one: bool = Tr
         X[f"Season_{s}"] = (season == s).astype(int)
     for s in STATES[1:]:
         X[f"State_{s}"] = (df["State"] == s).astype(int)
+    if "Road_Freeway" in feature_names:
+        streets = df["Street"].fillna("")
+        classes = streets.map({st: road_class(st) for st in streets.unique()})
+        X["Road_Freeway"] = (classes == "freeway").astype(int)
+        X["Road_Highway"] = (classes == "highway").astype(int)
     return X[feature_names]
 
 
@@ -158,6 +164,7 @@ def directional_tests(model, feature_names, df: pd.DataFrame, n: int = 300) -> l
         ("Vent fort (35 mph)", {"Wind_Speed_mph": 35, "Weather_Condition": "Fair / Windy"}, "hausse"),
         ("Feu de signalisation", {"Traffic_Signal": 1}, "?"),
         ("Intersection", {"Junction": 1}, "?"),
+        ("Autoroute (vs rue)", {"Road_Class": "freeway"}, "?"),
     ]
     p0 = model.predict_proba(to_frame([build_row(s) for s in scenarios], feature_names))[:, 1]
     out = []
@@ -196,13 +203,19 @@ def main() -> None:
     ap.add_argument("--data", default=str(ROOT / "data" / "raw" / "shard0.parquet"))
     ap.add_argument("--sample", type=int, default=300_000)
     ap.add_argument("--model", default=str(ROOT / "ml" / "models" / "saferoad_model.pkl"))
+    ap.add_argument("--years", type=int, nargs="*", help="années évaluées (ex. 2022 = jeu de test du modèle v3)")
     args = ap.parse_args()
 
     bundle = joblib.load(args.model)
     model, feats = bundle["model"], list(bundle["feature_names"])
     thresholds = {k.replace("threshold_", ""): float(v) for k, v in bundle.items() if k.startswith("threshold_")}
 
-    df = load(args.data, args.sample)
+    df = load(args.data, 0 if args.years else args.sample)
+    if args.years:
+        df = df[df["Year"].isin(args.years)]
+        if args.sample and len(df) > args.sample:
+            df = df.sample(args.sample, random_state=42)
+        df = df.reset_index(drop=True)
     print(f"{len(df):,} accidents évalués")
 
     # 1. Identification de la cible et de l'encodage jour/nuit (par AUC)
@@ -227,7 +240,8 @@ def main() -> None:
     # 2. Fuite de données : Distance(mi) réelle vs valeur fixe utilisée par l'API
     median_dist = float(df["Distance(mi)"].median())
     X_fixed = X.copy()
-    X_fixed["Distance(mi)"] = median_dist
+    if "Distance(mi)" in feats:  # modèles v2 ; la v3 n'utilise plus cette variable
+        X_fixed["Distance(mi)"] = median_dist
     p_fixed = model.predict_proba(X_fixed)[:, 1]
     auc_fixed = roc_auc_score(target, p_fixed)
 
@@ -237,7 +251,6 @@ def main() -> None:
     base_sub = roc_auc_score(ys, model.predict_proba(Xs)[:, 1])
     groups = {
         "Localisation (lat/lng)": ["Start_Lat", "Start_Lng"],
-        "Distance d'impact": ["Distance(mi)"],
         "État": [c for c in feats if c.startswith("State_")],
         "Météo (conditions + mesures)": [c for c in feats if c.startswith("Weather_Condition_")]
         + ["Temperature(F)", "Humidity(%)", "Pressure(in)", "Visibility(mi)", "Wind_Speed(mph)", "Precipitation(in)"],
@@ -245,6 +258,10 @@ def main() -> None:
                                              "Sunrise_Sunset", "Season_Spring", "Season_Summer", "Season_Winter"],
         "Infrastructure routière": list(ROAD_FEATURES),
     }
+    if "Road_Freeway" in feats:
+        groups["Type de route"] = ["Road_Freeway", "Road_Highway"]
+    if "Distance(mi)" in feats:
+        groups["Distance d'impact"] = ["Distance(mi)"]
     perm = permutation_drop(model, Xs, ys, base_sub, groups)
 
     # 4. Stabilité par année et par État
@@ -266,6 +283,9 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "dataset": {
             "source": "US Accidents (Moosavi et al., mars 2023) — miroir Hugging Face yuvidhepe/us-accidents-updated, fragment 1/7",
+            "model_version": str(bundle.get("version", "2.0")),
+            "calibrated": bool(bundle.get("calibrated", False)),
+            "held_out_years": args.years or None,
             "rows_evaluated": int(len(df)),
             "years": sorted(int(y) for y in df["Year"].unique()),
             "positive_rate": round(float(target.mean()), 4),

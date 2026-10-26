@@ -21,7 +21,10 @@ node_modules/
 # OS
 .DS_Store
 ml/models/*.pkl
+api/.pytest_cache/
 # Données locales de l'API
 api/data/local_db.json
+api/data/cache.sqlite
 api/data/*.tmp
 frontend/dist/
+api/data/vapid_private.pem

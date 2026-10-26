@@ -1,5 +1,42 @@
 # Évaluation de la fiabilité du modèle SafeRoad AI
 
+## Mise à jour : modèle v3 (26/10/2026)
+
+Les recommandations 1 à 3 ci-dessous ont été appliquées (`ml/train.py`) :
+
+| | v2 | v3 |
+|---|---|---|
+| `Distance(mi)` (fuite de données) | utilisée | retirée (93 variables) |
+| Découpage | aucun garanti | entraînement 2016, 2017, 2021 · test **2022** (234 573 accidents jamais vus) |
+| Calibration | aucune (`scale_pos_weight`) | Platt sur un jeu séparé |
+| ROC-AUC (2022) | 0,881 | **0,900** |
+| PR-AUC (2022) | 0,776 | **0,812** |
+| Brier (2022) | 0,160 | **0,121** |
+| Score moyen / taux observé | 48,5 % / 33,5 % | **34,5 % / 33,5 %** |
+
+Seuils recalculés pour garder les compromis de la v2 (rappel visé 80 / 66 / 42 % sur le jeu de calibration) :
+Standard 0,51 · Pro 0,70 · Strict 0,87. Sur 2022 : rappel 73 / 57 / 36 %, précision 75 / 82 / 89 %.
+Niveaux : Modéré dès 0,27, Élevé dès 0,51, Très élevé dès 0,87.
+
+Calibration sur 2022 : bonne jusqu'à 0,5 ; légère surestimation au-delà (prédit 0,95 → observé 0,91).
+
+**Nouvelles observations (tests de cohérence v3, `ml/reports/evaluation.json`)** :
+pluie forte +13,5 pts, nuit +9,8 pts, brouillard +3,5 pts, intersection +8,6 pts (cohérent) ;
+neige légère −2,8 pts, heure de pointe −3,8 pts, vent fort −0,6 pt (incohérent ou neutre) ;
+**feu de signalisation −31,5 pts** : en ville, les accidents sont plus fréquents mais moins graves (vitesses
+basses). C'est une association réelle du jeu de données, mais elle fait baisser l'indice des trajets urbains
+maintenant que les équipements sont détectés via OpenStreetMap. La localisation reste le premier facteur
+(perte d'AUC de 0,17 si on la mélange).
+
+**Non traité, faute de données** : la recommandation 4 (risque d'*occurrence*) demande des exemples « sans
+accident » avec leur exposition (volumes de trafic, météo historique aux mêmes lieux et heures), et un modèle
+hors États-Unis demande un jeu d'accidents local géolocalisé. Aucun des deux n'est disponible dans le projet.
+Seul un fragment (1,1 M sur 7,7 M accidents) a servi à l'entraînement.
+
+---
+
+## Rapport initial (modèle v2)
+
 > Rapport produit par `ml/evaluate.py` (données brutes : `ml/reports/evaluation.json`).
 > Évalué le 19/10/2026 sur **299 581 accidents réels** du jeu US Accidents (mars 2023),
 > fragment 1/7 du miroir Hugging Face `yuvidhepe/us-accidents-updated` (années 2016, 2017, 2021, 2022).

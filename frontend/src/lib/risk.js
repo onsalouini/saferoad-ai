@@ -6,6 +6,8 @@ export const STATUS = {
   critical: { label: "Très élevé", icon: "■", text: "text-critical", bg: "bg-critical", ring: "ring-critical/40", hex: "#d03b3b" },
 }
 
+// Bornes des niveaux et seuils des modes : valeurs par défaut (modèle v2), remplacées au démarrage
+// par celles du modèle chargé (GET /model/options, voir configureLevels dans main.jsx).
 export const LEVEL_BOUNDS = [
   { status: "good", from: 0, to: 40 },
   { status: "warning", from: 40, to: 65 },
@@ -14,17 +16,44 @@ export const LEVEL_BOUNDS = [
 ]
 
 export function statusOf(score) {
-  if (score >= 80) return "critical"
-  if (score >= 65) return "serious"
-  if (score >= 40) return "warning"
+  for (let i = LEVEL_BOUNDS.length - 1; i > 0; i--) {
+    if (score >= LEVEL_BOUNDS[i].from) return LEVEL_BOUNDS[i].status
+  }
   return "good"
 }
 
-export const MODES = {
-  standard: { label: "Standard", hint: "Alerte dès 65 / 100 — détecte le plus de situations graves" },
-  pro: { label: "Pro", hint: "Alerte dès 75 / 100 — équilibre alertes / fausses alertes" },
-  strict: { label: "Strict", hint: "Alerte dès 85 / 100 — n'alerte que dans les cas les plus nets" },
+const MODE_HINTS = {
+  standard: "détecte le plus de situations graves",
+  pro: "équilibre alertes / fausses alertes",
+  strict: "n'alerte que dans les cas les plus nets",
 }
+
+export const MODES = {
+  standard: { label: "Standard", hint: `Alerte dès 65 / 100 — ${MODE_HINTS.standard}` },
+  pro: { label: "Pro", hint: `Alerte dès 75 / 100 — ${MODE_HINTS.pro}` },
+  strict: { label: "Strict", hint: `Alerte dès 85 / 100 — ${MODE_HINTS.strict}` },
+}
+
+/** Applique les seuils du modèle chargé côté API ({ levels: {warning, serious, critical}, modes: {...} }). */
+export function configureLevels({ levels, modes } = {}) {
+  if (levels) {
+    const b = [0, levels.warning * 100, levels.serious * 100, levels.critical * 100, 100].map((x) => Math.round(x))
+    LEVEL_BOUNDS.forEach((lvl, i) => { lvl.from = b[i]; lvl.to = b[i + 1] })
+  }
+  for (const [k, t] of Object.entries(modes || {})) {
+    if (MODES[k]) MODES[k].hint = `Alerte dès ${Math.round(t * 100)} / 100 — ${MODE_HINTS[k]}`
+  }
+}
+
+// Profils conducteur / véhicule : règles de prudence (alerte plus précoce), le modèle ne connaît pas le véhicule
+export const PROFILES = {
+  standard: { label: "Voiture", icon: "🚗", hint: "Seuils d'alerte du mode choisi." },
+  moto: { label: "Moto / deux-roues", icon: "🏍", hint: "Alerte 10 points plus tôt ; vérifications vent et froid." },
+  poids_lourd: { label: "Poids lourd", icon: "🚚", hint: "Alerte 5 points plus tôt ; vent, pauses toutes les 4 h 30." },
+  jeune: { label: "Jeune conducteur", icon: "🔰", hint: "Alerte 8 points plus tôt ; conseils adaptés." },
+}
+
+export const ROAD_CLASS_FR = { freeway: "Autoroute", highway: "Route", local: "Rue" }
 
 export const WEATHER_FR = {
   Clear: "Dégagé", Fair: "Beau temps", "Fair / Windy": "Beau temps venteux", "Partly Cloudy": "Partiellement nuageux",

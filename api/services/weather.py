@@ -142,6 +142,7 @@ async def hourly_forecast(points: list[tuple[float, float]], hours: int = 24) ->
                 "Hour": t.hour,
                 "DayOfWeek": t.weekday(),  # 0 = lundi
                 "Month": t.month,
+                "utc_offset_s": loc.get("utc_offset_seconds", 0),
             })
             series.append(w)
         out.append(series)
