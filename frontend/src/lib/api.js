@@ -1,6 +1,7 @@
 import axios from "axios"
 
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
+// VITE_API_URL="" (chaîne vide) = même origine que le site (déploiement en un seul service)
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000"
 
 // Session : cookie httpOnly posé par l'API (envoyé automatiquement, inaccessible au JavaScript)
 export const api = axios.create({ baseURL: API_URL, timeout: 45000, withCredentials: true })

@@ -2,9 +2,11 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from database import Database
 from ml.features import WEATHER_CHOICES
@@ -55,8 +57,8 @@ app.include_router(reports.router)
 app.include_router(account.router)
 
 
-@app.get("/", tags=["Système"])
-def root():
+@app.get("/api", tags=["Système"])
+def api_root():
     return {"message": "SafeRoad AI API is running", "docs": "/docs"}
 
 
@@ -79,3 +81,26 @@ def model_info():
 @app.get("/model/options", tags=["Modèle"])
 def model_options():
     return {"weather_conditions": WEATHER_CHOICES, "modes": model_service.thresholds, "levels": model_service.level_bounds}
+
+
+# ------------------------------------------------------------------ frontend
+# Déploiement en un seul service (Dockerfile à la racine) : l'API sert aussi le site construit.
+# Même origine pour le site et l'API : le cookie de session reste « first-party » (pas bloqué
+# par les navigateurs comme un cookie tiers) et aucune configuration CORS n'est nécessaire.
+FRONTEND_DIST = Path(os.getenv("FRONTEND_DIST", Path(__file__).resolve().parents[1] / "frontend" / "dist"))
+
+if (FRONTEND_DIST / "index.html").exists():
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend(path: str):
+        file = (FRONTEND_DIST / path).resolve()
+        if path and file.is_file() and FRONTEND_DIST.resolve() in file.parents:
+            headers = {"Cache-Control": "no-cache"} if path in ("sw.js", "manifest.webmanifest") else (
+                {"Cache-Control": "public, max-age=31536000, immutable"} if path.startswith("assets/") else None)
+            return FileResponse(file, headers=headers)
+        if path.startswith(("assets/", "icons/")):
+            raise HTTPException(404)
+        return FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})  # routes de l'application
+else:
+    @app.get("/", tags=["Système"])
+    def root():
+        return {"message": "SafeRoad AI API is running", "docs": "/docs"}

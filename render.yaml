@@ -1,67 +1,58 @@
-# Déploiement sur Render (https://render.com) : « New > Blueprint » puis choisir ce dépôt.
-# Les secrets (JWT_SECRET, ANTHROPIC_API_KEY, SMTP_*, MONGO_URI…) se saisissent dans le tableau de bord.
-# Le modèle (ml/models/saferoad_model.pkl, non versionné) doit être fourni : disque persistant
-# monté sur /app/ml/models, ou téléchargement au démarrage (MODEL_URL, voir README).
+# Déploiement gratuit sur Render : https://dashboard.render.com > New > Blueprint > choisir ce dépôt.
+# Un seul service Docker (Dockerfile à la racine) : l'API sert aussi le site (même origine).
+# Offre gratuite : le service s'endort après 15 min sans visite (réveil ~1 min) et n'a pas de disque :
+# - données : MongoDB Atlas (MONGO_URI) ;
+# - modèle : téléchargé au démarrage depuis MODEL_URL (release GitHub) ;
+# - clé push : VAPID_PRIVATE_KEY (contenu PEM) pour que les abonnements survivent aux redémarrages.
+# Les valeurs « sync: false » se saisissent dans le tableau de bord au moment de la création.
 services:
   - type: web
-    name: saferoad-api
+    name: saferoad-ai
     runtime: docker
-    dockerfilePath: api/Dockerfile
+    dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
+    region: frankfurt
     healthCheckPath: /health
-    disk:
-      name: models
-      mountPath: /app/ml/models
-      sizeGB: 1
+    autoDeploy: true
     envVars:
       - key: JWT_SECRET
         generateValue: true
       - key: COOKIE_SECURE
         value: "true"
       - key: COOKIE_SAMESITE
-        value: none          # frontend et API sur deux sous-domaines différents
-      - key: SCHEDULER_ENABLED
-        value: "true"
+        value: lax
       - key: ENVIRONMENT
         value: production
+      - key: SCHEDULER_ENABLED
+        value: "true"
+      - key: ASSISTANT_PROVIDER
+        value: groq
       - key: MONGO_URI
         sync: false
-      - key: CORS_ORIGINS
-        sync: false          # ex. https://saferoad-web.onrender.com
+      - key: MODEL_URL
+        sync: false
       - key: FRONTEND_URL
+        sync: false          # ex. https://saferoad-ai.onrender.com (liens des e-mails)
+      - key: CORS_ORIGINS
+        sync: false          # même valeur que FRONTEND_URL
+      - key: GROQ_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: TOMTOM_API_KEY
         sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_CONTACT
+        sync: false          # ex. mailto:vous@exemple.com
       - key: SMTP_HOST
         sync: false
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASSWORD
         sync: false
+      - key: SMTP_FROM
+        sync: false
       - key: SENTRY_DSN
         sync: false
-      - key: VAPID_CONTACT
-        sync: false
-      - key: VAPID_PRIVATE_KEY_FILE
-        value: /app/ml/models/vapid_private.pem   # sur le disque persistant : les abonnements push survivent
-
-  - type: web
-    name: saferoad-web
-    runtime: static
-    rootDir: frontend
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_API_URL
-        sync: false          # ex. https://saferoad-api.onrender.com
-    headers:
-      - path: /sw.js
-        name: Cache-Control
-        value: no-cache
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html

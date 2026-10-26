@@ -2,8 +2,9 @@
 """
 Notifications Web Push (standard VAPID) : les alertes arrivent même quand l'application est fermée.
 
-Les clés VAPID sont lues depuis VAPID_PRIVATE_KEY_FILE ; sinon elles sont générées au premier
-démarrage dans api/data/vapid_private.pem (à conserver : changer de clé invalide les abonnements).
+Clé VAPID privée (PEM), par ordre de priorité : variable VAPID_PRIVATE_KEY (hébergeurs sans disque
+persistant), fichier VAPID_PRIVATE_KEY_FILE, sinon générée au premier démarrage dans
+api/data/vapid_private.pem. À conserver : changer de clé invalide les abonnements.
 """
 from __future__ import annotations
 
@@ -24,6 +25,10 @@ def _load():
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
     from py_vapid import Vapid01
 
+    pem = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n").strip()
+    if pem and not KEY_FILE.exists():
+        KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        KEY_FILE.write_text(pem + "\n", encoding="utf-8")
     if KEY_FILE.exists():
         v = Vapid01.from_file(str(KEY_FILE))
     else:

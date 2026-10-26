@@ -108,8 +108,12 @@ npm run dev                                # http://localhost:5173
 npm run test:e2e                           # tests de bout en bout (Playwright, API simulée)
 ```
 
-Déploiement : [render.yaml](render.yaml) (Render Blueprint : API Docker + frontend statique). Le modèle se
-place sur le disque persistant ou se télécharge au démarrage via `MODEL_URL`.
+Déploiement : [render.yaml](render.yaml), Render Blueprint gratuit. Un seul service Docker
+([Dockerfile](Dockerfile)) : l'API sert aussi le site construit, à la même adresse. Le cookie de session reste
+ainsi « first-party » (non bloqué par les navigateurs). Variables à fournir : `MONGO_URI` (MongoDB Atlas
+gratuit), `MODEL_URL` (lien vers `saferoad_model.pkl`, par exemple une release GitHub), `GROQ_API_KEY`,
+`VAPID_PRIVATE_KEY` (contenu PEM) et `FRONTEND_URL` / `CORS_ORIGINS` (l'adresse du service). Sur l'offre
+gratuite, le service s'endort après 15 min sans visite : les alertes planifiées ne tournent pas pendant ce temps.
 
 Ou avec Docker : `docker compose up --build` (frontend sur http://localhost:8080).
 
