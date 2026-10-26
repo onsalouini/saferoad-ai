@@ -28,3 +28,4 @@ api/data/cache.sqlite
 api/data/*.tmp
 frontend/dist/
 api/data/vapid_private.pem
+demo/*.mp4

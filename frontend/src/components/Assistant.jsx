@@ -115,7 +115,7 @@ export default function Assistant({ context, suggestions = [], intro, autoPrompt
   }
 
   if (status && !status.available) {
-    return <Alert tone="info" title="Copilote IA désactivé">Le serveur n'a pas de clé Claude API (ANTHROPIC_API_KEY dans api/.env).</Alert>
+    return <Alert tone="info" title="Copilote IA désactivé">Le serveur n'a pas de clé d'IA (GROQ_API_KEY ou ANTHROPIC_API_KEY dans api/.env).</Alert>
   }
   if (!user) {
     return (
@@ -199,7 +199,7 @@ export default function Assistant({ context, suggestions = [], intro, autoPrompt
           : <button type="submit" className="btn-primary shrink-0" disabled={!input.trim()}>Envoyer</button>}
       </form>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-muted">Réponses générées par IA (Claude), qui peut lancer des analyses. Vérifiez toujours les conditions réelles.</p>
+        <p className="text-[11px] text-muted">Réponses générées par IA{status?.model ? ` (${status.model})` : ""}, qui peut lancer des analyses. Vérifiez toujours les conditions réelles.</p>
         {speechSupported && (
           <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-soft">
             <input type="checkbox" checked={readAloud} onChange={(e) => { setReadAloud(e.target.checked); if (!e.target.checked) stopSpeaking() }}

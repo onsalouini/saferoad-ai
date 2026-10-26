@@ -16,6 +16,8 @@ os.environ.update({
     "SCHEDULER_ENABLED": "false",
     "JWT_SECRET": "secret-de-test-suffisamment-long-pour-hs256",
     "ANTHROPIC_API_KEY": "",
+    "GROQ_API_KEY": "",
+    "ASSISTANT_PROVIDER": "anthropic",
     "SMTP_HOST": "",
     "DISK_CACHE_PATH": str(Path(_tmp) / "cache.sqlite"),
     "VAPID_PRIVATE_KEY_FILE": str(Path(_tmp) / "vapid.pem"),

@@ -23,7 +23,7 @@ const FEATURES = [
   },
   {
     t: "Copilote IA", to: "/copilote", badge: "Nouveau",
-    d: "Un assistant (Claude) qui lit votre analyse, rédige un briefing clair et répond à vos questions de conduite.",
+    d: "Un assistant IA qui lit votre analyse, rédige un briefing clair et répond à vos questions de conduite.",
     icon: <><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4L12 3z" /><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></>,
   },
   {

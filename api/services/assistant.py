@@ -1,9 +1,12 @@
 # api/services/assistant.py
 """
-Copilote SafeRoad : assistant conversationnel (Claude) qui explique les analyses du modèle,
+Copilote SafeRoad : assistant conversationnel qui explique les analyses du modèle,
 lance lui-même des analyses (outils) et donne des conseils de conduite.
 
-Activé si ANTHROPIC_API_KEY est défini dans api/.env ; sinon les routes répondent 503.
+Deux fournisseurs, choisis par ASSISTANT_PROVIDER dans api/.env :
+- « anthropic » (Claude, ANTHROPIC_API_KEY) ;
+- « groq » (modèles open source, offre gratuite, GROQ_API_KEY ; voir services/assistant_groq.py).
+Sans clé pour le fournisseur choisi, les routes répondent 503.
 
 La réponse est diffusée en NDJSON, un événement JSON par ligne :
     {"type": "text", "text": "..."}                       morceau de réponse
@@ -26,11 +29,14 @@ from database import db
 from ml.features import WEATHER_CHOICES
 from ml.predict import model_service
 
-from . import alerts, geo, weather
+from . import alerts, assistant_groq, geo, weather
 from .shared import RateLimiter
 from .trip import TripError, analyse_trip, compact
 
-MODEL = os.getenv("ASSISTANT_MODEL", "claude-opus-5-5")
+PROVIDER = os.getenv("ASSISTANT_PROVIDER", "anthropic").lower()
+CLAUDE_MODEL = os.getenv("ASSISTANT_MODEL", "claude-opus-5-5")
+MODEL = assistant_groq.MODEL if PROVIDER == "groq" else CLAUDE_MODEL
+PROVIDER_LABEL = {"groq": f"{assistant_groq.MODEL} via Groq", "anthropic": f"Claude ({CLAUDE_MODEL})"}.get(PROVIDER, PROVIDER)
 RATE_LIMIT = int(os.getenv("ASSISTANT_RATE_LIMIT", "30"))  # messages par utilisateur et par heure
 MAX_TOOL_TURNS = 6
 
@@ -77,6 +83,8 @@ limiter = RateLimiter("assistant", RATE_LIMIT, 3600)
 
 
 def available() -> bool:
+    if PROVIDER == "groq":
+        return assistant_groq.available()
     return bool(os.getenv("ANTHROPIC_API_KEY"))
 
 
@@ -209,11 +217,13 @@ async def _track(user_id: str | None, usage) -> None:
     if not user_id or usage is None:
         return
     month = datetime.now().strftime("%Y-%m")
+    if isinstance(usage, dict):  # Groq (format OpenAI)
+        tokens_in, tokens_out = usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+    else:  # Claude
+        tokens_in = int(getattr(usage, "input_tokens", 0) or 0) + int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+        tokens_out = int(getattr(usage, "output_tokens", 0) or 0)
     await db().increment(user_id, ["assistant_usage", month], {
-        "input_tokens": int(getattr(usage, "input_tokens", 0) or 0)
-        + int(getattr(usage, "cache_read_input_tokens", 0) or 0),
-        "output_tokens": int(getattr(usage, "output_tokens", 0) or 0),
-        "requests": 1,
+        "input_tokens": int(tokens_in or 0), "output_tokens": int(tokens_out or 0), "requests": 1,
     })
 
 
@@ -221,6 +231,10 @@ async def stream_reply(messages: list[dict], context: dict | None, user_id: str 
     """Événements NDJSON de la réponse, au fil de l'eau. Les erreurs sont renvoyées dans le flux."""
     events: list[dict] = []
     tools = _make_tools(events) if model_service.ready else []
+    if PROVIDER == "groq":
+        async for line in _stream_groq(messages, context, user_id, tools, events):
+            yield line
+        return
     try:
         runner = _get_client().beta.messages.tool_runner(
             model=MODEL,
@@ -263,3 +277,25 @@ async def stream_reply(messages: list[dict], context: dict | None, user_id: str 
     except anthropic.APIStatusError as e:
         print(f"Erreur Claude API {e.status_code} : {e.message}")
         yield _event("error", message="Le copilote a rencontré une erreur. Réessayez dans un instant.")
+
+
+async def _stream_groq(messages: list[dict], context: dict | None, user_id: str | None, tools, events) -> AsyncIterator[str]:
+    system = "\n\n".join(b["text"] for b in _system(context))
+    try:
+        async for line, usage in assistant_groq.stream(system, messages, tools, TOOL_LABELS, MAX_TOOL_TURNS, _event, events):
+            if usage:
+                await _track(user_id, usage)
+            if line:
+                yield line
+    except httpx.HTTPStatusError as e:
+        code = e.response.status_code
+        print(f"Erreur Groq {code} : {e}")
+        if code == 429:
+            yield _event("error", message="Le copilote est très sollicité (limite gratuite Groq). Réessayez dans une minute.")
+        elif code in (401, 403):
+            yield _event("error", message="Le copilote est mal configuré (clé Groq invalide). Contactez l'administrateur.")
+        else:
+            yield _event("error", message="Le copilote a rencontré une erreur. Réessayez dans un instant.")
+    except httpx.HTTPError as e:
+        print(f"Groq injoignable : {e}")
+        yield _event("error", message="Impossible de joindre le service d'IA. Vérifiez la connexion du serveur.")

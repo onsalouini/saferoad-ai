@@ -57,7 +57,7 @@ export default function App() {
               </Suspense>
             </main>
             <footer className="border-t border-line/60 py-6 text-center text-xs text-muted">
-              SafeRoad AI · Données : US Accidents (Moosavi et al.), OpenStreetMap, OSRM, Open-Meteo · IA : Claude (Anthropic) · Alertes : NWS ·
+              SafeRoad AI · Données : US Accidents (Moosavi et al.), OpenStreetMap, OSRM, Open-Meteo · IA : Groq / Claude · Trafic : TomTom · Alertes : NWS ·
               Outil d'aide à la décision, ne remplace pas la vigilance du conducteur.
             </footer>
           </div>
